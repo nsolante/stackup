@@ -61,6 +61,10 @@ cp .env.example .env
 Running locally:
 
 ```bash
+yarn docker:dev:dependencies
+```
+
+```bash
 yarn dev
 ```
 
