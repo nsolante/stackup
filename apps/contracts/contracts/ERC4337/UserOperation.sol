@@ -7,7 +7,8 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "../ERC2470/SingletonFactory.sol";
-import "./interface/IWallet.sol";
+import {IWallet} from "./interface/IWallet.sol";
+import {Stake} from "./Stake.sol";
 
 struct UserOperation {
   address sender;
@@ -37,6 +38,14 @@ library UserOperationUtils {
     } else {
       return Math.min(op.maxFeePerGas, op.maxPriorityFeePerGas + block.basefee);
     }
+  }
+
+  function requiredPrefund(UserOperation calldata op)
+    internal
+    view
+    returns (uint256)
+  {
+    return totalGas(op) * gasPrice(op);
   }
 
   function messageHash(UserOperation calldata op)
@@ -78,16 +87,33 @@ library EntryPointUserOperation {
     return !Address.isContract(op.sender) && op.initCode.length != 0;
   }
 
+  function hasPaymaster(UserOperation calldata op)
+    internal
+    pure
+    returns (bool)
+  {
+    return op.paymaster != address(0);
+  }
+
+  function verifyPaymasterStake(UserOperation calldata op, Stake memory stake)
+    internal
+    view
+  {
+    require(stake.isLocked, "EntryPoint: Stake not locked");
+    require(
+      stake.value >= op.requiredPrefund(),
+      "EntryPoint: Insufficient stake"
+    );
+  }
+
   function deployWallet(UserOperation calldata op, address create2Factory)
     internal
   {
     SingletonFactory(create2Factory).deploy(op.initCode, bytes32(op.nonce));
   }
 
-  function validate(UserOperation calldata op) internal {
-    uint256 totalGas = op.totalGas();
-    uint256 gasPrice = op.gasPrice();
-    uint256 requiredPrefund = totalGas * gasPrice;
+  function validateUserOp(UserOperation calldata op) internal {
+    uint256 requiredPrefund = hasPaymaster(op) ? 0 : op.requiredPrefund();
     uint256 initBalance = address(this).balance;
 
     IWallet(op.sender).validateUserOp{gas: op.verificationGas}(

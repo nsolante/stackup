@@ -36,7 +36,11 @@ contract EntryPoint is IEntryPoint, IEntryPointStakeController {
         ops[i].deployWallet(create2Factory);
       }
 
-      ops[i].validate();
+      if (ops[i].hasPaymaster()) {
+        ops[i].verifyPaymasterStake(_paymasterStakes[ops[i].paymaster]);
+      }
+
+      ops[i].validateUserOp();
     }
 
     // Execution loop
